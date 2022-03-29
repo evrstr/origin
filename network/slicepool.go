@@ -16,7 +16,8 @@ type memAreaPool struct {
 	pool         []sync.Pool
 }
 
-var memAreaPoolList = [3]*memAreaPool{&memAreaPool{minAreaValue: 1, maxAreaValue: 4096, growthValue: 512}, &memAreaPool{minAreaValue: 4097, maxAreaValue: 40960, growthValue: 4096}, &memAreaPool{minAreaValue: 40961, maxAreaValue: 417792, growthValue: 16384}}
+// var memAreaPoolList = [3]*memAreaPool{&memAreaPool{minAreaValue: 1, maxAreaValue: 4096, growthValue: 512}, &memAreaPool{minAreaValue: 4097, maxAreaValue: 40960, growthValue: 4096}, &memAreaPool{minAreaValue: 40961, maxAreaValue: 417792, growthValue: 16384}}
+var memAreaPoolList = [3]*memAreaPool{{minAreaValue: 1, maxAreaValue: 4096, growthValue: 512}, {minAreaValue: 4097, maxAreaValue: 40960, growthValue: 4096}, {minAreaValue: 40961, maxAreaValue: 417792, growthValue: 16384}}
 
 func init() {
 	for i := 0; i < len(memAreaPoolList); i++ {
@@ -62,7 +63,7 @@ func (areaPool *memAreaPool) releaseByteSlice(byteBuff []byte) bool {
 	pos := areaPool.getPosByteSize(cap(byteBuff))
 	if pos > len(areaPool.pool) || pos == -1 {
 		panic("assert!")
-		return false
+
 	}
 
 	areaPool.pool[pos].Put(byteBuff)

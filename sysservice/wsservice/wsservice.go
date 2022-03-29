@@ -117,8 +117,6 @@ func (ws *WSService) NewWSClient(conn *network.WSConn) network.Agent {
 		ws.mapClient[ws.initClientId] = pClient
 		return pClient
 	}
-
-	return nil
 }
 
 func (slf *WSClient) GetId() uint64 {
@@ -149,27 +147,27 @@ func (slf *WSClient) OnClose() {
 	delete(slf.wsService.mapClient, slf.GetId())
 }
 
-func (ws *WSService) SendMsg(clientid uint64, msg interface{}) error {
+func (ws *WSService) SendMsg(clientId uint64, msg interface{}) error {
 	ws.mapClientLocker.Lock()
-	client, ok := ws.mapClient[clientid]
+	client, ok := ws.mapClient[clientId]
 	if ok == false {
 		ws.mapClientLocker.Unlock()
-		return fmt.Errorf("client %d is disconnect!", clientid)
+		return fmt.Errorf("client %d is disconnect!", clientId)
 	}
 
 	ws.mapClientLocker.Unlock()
-	bytes, err := ws.process.Marshal(clientid, msg)
+	bytes, err := ws.process.Marshal(clientId, msg)
 	if err != nil {
 		return err
 	}
 	return client.wsConn.WriteMsg(bytes)
 }
 
-func (ws *WSService) Close(clientid uint64) {
+func (ws *WSService) Close(clientId uint64) {
 	ws.mapClientLocker.Lock()
 	defer ws.mapClientLocker.Unlock()
 
-	client, ok := ws.mapClient[clientid]
+	client, ok := ws.mapClient[clientId]
 	if ok == false {
 		return
 	}

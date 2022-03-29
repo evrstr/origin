@@ -2,21 +2,21 @@ package rpc
 
 import (
 	"github.com/duanhf2012/origin/util/sync"
-	"github.com/gogo/protobuf/proto"
+	"github.com/golang/protobuf/proto"
 )
 
 type GoGoPBProcessor struct {
 }
 
-var rpcGoGoPbResponseDataPool =sync.NewPool(make(chan interface{},10240), func()interface{}{
+var rpcGoGoPbResponseDataPool = sync.NewPool(make(chan interface{}, 10240), func() interface{} {
 	return &GoGoPBRpcResponseData{}
 })
 
-var rpcGoGoPbRequestDataPool =sync.NewPool(make(chan interface{},10240), func()interface{}{
+var rpcGoGoPbRequestDataPool = sync.NewPool(make(chan interface{}, 10240), func() interface{} {
 	return &GoGoPBRpcRequestData{}
 })
 
-func (slf *GoGoPBRpcRequestData) MakeRequest(seq uint64,rpcMethodId uint32,serviceMethod string,noReply bool,inParam []byte) *GoGoPBRpcRequestData{
+func (slf *GoGoPBRpcRequestData) MakeRequest(seq uint64, rpcMethodId uint32, serviceMethod string, noReply bool, inParam []byte) *GoGoPBRpcRequestData {
 	slf.Seq = seq
 	slf.RpcMethodId = rpcMethodId
 	slf.ServiceMethod = serviceMethod
@@ -26,8 +26,7 @@ func (slf *GoGoPBRpcRequestData) MakeRequest(seq uint64,rpcMethodId uint32,servi
 	return slf
 }
 
-
-func (slf *GoGoPBRpcResponseData) MakeRespone(seq uint64,err RpcError,reply []byte) *GoGoPBRpcResponseData{
+func (slf *GoGoPBRpcResponseData) MakeRespone(seq uint64, err RpcError, reply []byte) *GoGoPBRpcResponseData {
 	slf.Seq = seq
 	slf.Error = err.Error()
 	slf.Reply = reply
@@ -35,49 +34,49 @@ func (slf *GoGoPBRpcResponseData) MakeRespone(seq uint64,err RpcError,reply []by
 	return slf
 }
 
-func (slf *GoGoPBProcessor) Marshal(v interface{}) ([]byte, error){
+func (slf *GoGoPBProcessor) Marshal(v interface{}) ([]byte, error) {
 	return proto.Marshal(v.(proto.Message))
 }
 
-func (slf *GoGoPBProcessor) Unmarshal(data []byte, msg interface{}) error{
+func (slf *GoGoPBProcessor) Unmarshal(data []byte, msg interface{}) error {
 	protoMsg := msg.(proto.Message)
 	return proto.Unmarshal(data, protoMsg)
 }
 
-func (slf *GoGoPBProcessor) MakeRpcRequest(seq uint64,rpcMethodId uint32,serviceMethod string,noReply bool,inParam []byte) IRpcRequestData{
+func (slf *GoGoPBProcessor) MakeRpcRequest(seq uint64, rpcMethodId uint32, serviceMethod string, noReply bool, inParam []byte) IRpcRequestData {
 	pGogoPbRpcRequestData := rpcGoGoPbRequestDataPool.Get().(*GoGoPBRpcRequestData)
-	pGogoPbRpcRequestData.MakeRequest(seq,rpcMethodId,serviceMethod,noReply,inParam)
+	pGogoPbRpcRequestData.MakeRequest(seq, rpcMethodId, serviceMethod, noReply, inParam)
 	return pGogoPbRpcRequestData
 }
 
-func (slf *GoGoPBProcessor) MakeRpcResponse(seq uint64,err RpcError,reply []byte) IRpcResponseData {
+func (slf *GoGoPBProcessor) MakeRpcResponse(seq uint64, err RpcError, reply []byte) IRpcResponseData {
 	pGoGoPBRpcResponseData := rpcGoGoPbResponseDataPool.Get().(*GoGoPBRpcResponseData)
-	pGoGoPBRpcResponseData.MakeRespone(seq,err,reply)
+	pGoGoPBRpcResponseData.MakeRespone(seq, err, reply)
 	return pGoGoPBRpcResponseData
 }
 
-func (slf *GoGoPBProcessor) ReleaseRpcRequest(rpcRequestData IRpcRequestData){
+func (slf *GoGoPBProcessor) ReleaseRpcRequest(rpcRequestData IRpcRequestData) {
 	rpcGoGoPbRequestDataPool.Put(rpcRequestData)
 }
 
-func (slf *GoGoPBProcessor) ReleaseRpcResponse(rpcResponseData IRpcResponseData){
+func (slf *GoGoPBProcessor) ReleaseRpcResponse(rpcResponseData IRpcResponseData) {
 	rpcGoGoPbResponseDataPool.Put(rpcResponseData)
 }
 
 func (slf *GoGoPBProcessor) IsParse(param interface{}) bool {
-	_,ok := param.(proto.Message)
+	_, ok := param.(proto.Message)
 	return ok
 }
 
-func (slf *GoGoPBProcessor)	GetProcessorType() RpcProcessorType{
+func (slf *GoGoPBProcessor) GetProcessorType() RpcProcessorType {
 	return RpcProcessorGoGoPB
 }
 
-func (slf *GoGoPBRpcRequestData) IsNoReply() bool{
+func (slf *GoGoPBRpcRequestData) IsNoReply() bool {
 	return slf.GetNoReply()
 }
 
-func (slf *GoGoPBRpcResponseData)		GetErr() *RpcError {
+func (slf *GoGoPBRpcResponseData) GetErr() *RpcError {
 	if slf.GetError() == "" {
 		return nil
 	}
@@ -85,11 +84,3 @@ func (slf *GoGoPBRpcResponseData)		GetErr() *RpcError {
 	err := RpcError(slf.GetError())
 	return &err
 }
-
-
-
-
-
-
-
-

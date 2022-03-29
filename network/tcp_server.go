@@ -1,28 +1,29 @@
 package network
 
 import (
-	"github.com/duanhf2012/origin/log"
 	"net"
 	"sync"
 	"time"
+
+	"github.com/duanhf2012/origin/log"
 )
 
 type TCPServer struct {
 	Addr            string
-	MaxConnNum      int
+	MaxConnNum      int //最大连接数量
 	PendingWriteNum int
-	NewAgent        func(*TCPConn) Agent
+	NewAgent        func(*TCPConn) Agent //代理
 	ln              net.Listener
 	conns           ConnSet
 	mutexConns      sync.Mutex
 	wgLn            sync.WaitGroup
 	wgConns         sync.WaitGroup
 
-	// msg parser
-	LenMsgLen    int
-	MinMsgLen    uint32
-	MaxMsgLen    uint32
-	LittleEndian bool
+	// msg parser 消息解析
+	LenMsgLen    int    //tcp包最前面表示包长度的位数，默认2
+	MinMsgLen    uint32 //最大包长
+	MaxMsgLen    uint32 //最小包长
+	LittleEndian bool   //是否是小端模式
 	msgParser    *MsgParser
 	netMemPool   INetMempool
 }
@@ -64,11 +65,11 @@ func (server *TCPServer) init() {
 	server.msgParser = msgParser
 }
 
-func (server *TCPServer) SetNetMempool(mempool INetMempool){
+func (server *TCPServer) SetNetMempool(mempool INetMempool) {
 	server.msgParser.INetMempool = mempool
 }
 
-func (server *TCPServer) GetNetMempool() INetMempool{
+func (server *TCPServer) GetNetMempool() INetMempool {
 	return server.msgParser.INetMempool
 }
 
@@ -89,7 +90,7 @@ func (server *TCPServer) run() {
 				if max := 1 * time.Second; tempDelay > max {
 					tempDelay = max
 				}
-				log.SRelease("accept error:",err.Error(),"; retrying in ", tempDelay)
+				log.SRelease("accept error:", err.Error(), "; retrying in ", tempDelay)
 				time.Sleep(tempDelay)
 				continue
 			}
@@ -138,4 +139,8 @@ func (server *TCPServer) Close() {
 	server.conns = nil
 	server.mutexConns.Unlock()
 	server.wgConns.Wait()
+}
+
+func (server *TCPServer) GetAddr() string {
+	return server.Addr
 }

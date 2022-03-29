@@ -5,7 +5,7 @@ package rpc
 
 import (
 	fmt "fmt"
-	proto "github.com/gogo/protobuf/proto"
+	proto 	"github.com/golang/protobuf/proto"
 	io "io"
 	math "math"
 	math_bits "math/bits"
@@ -20,7 +20,7 @@ var _ = math.Inf
 // is compatible with the proto package it is being compiled against.
 // A compilation error at this line likely means your copy of the
 // proto package needs to be updated.
-const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
+// const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
 type GoGoPBRpcRequestData struct {
 	Seq                  uint64   `protobuf:"varint,1,opt,name=Seq,proto3" json:"Seq,omitempty"`

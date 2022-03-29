@@ -3,9 +3,10 @@ package processor
 import (
 	"encoding/binary"
 	"fmt"
-	"github.com/duanhf2012/origin/network"
-	"github.com/gogo/protobuf/proto"
 	"reflect"
+
+	"github.com/duanhf2012/origin/network"
+	proto "github.com/golang/protobuf/proto"
 )
 
 type MessageInfo struct {
@@ -112,6 +113,8 @@ func (pbProcessor *PBProcessor) Marshal(clientId uint64, msg interface{}) ([]byt
 	return buff, nil
 }
 
+//msgtype 相当于路由，msg相当于这个tcp包中存储的数据类型，handle是回调函数
+//当对端的msgtype是已经注册的类型时，就会调用这个回调函数
 func (pbProcessor *PBProcessor) Register(msgtype uint16, msg proto.Message, handle MessageHandler) {
 	var info MessageInfo
 
