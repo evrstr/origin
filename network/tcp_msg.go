@@ -74,6 +74,7 @@ func (p *MsgParser) Read(conn *TCPConn) ([]byte, error) {
 	}
 
 	// parse len
+	//解析tcp包长度
 	var msgLen uint32
 	switch p.lenMsgLen {
 	case 1:
@@ -93,13 +94,15 @@ func (p *MsgParser) Read(conn *TCPConn) ([]byte, error) {
 	}
 
 	// check len
+	//检查包长度是否合法
 	if msgLen > p.maxMsgLen {
 		return nil, errors.New("message too long")
 	} else if msgLen < p.minMsgLen {
 		return nil, errors.New("message too short")
 	}
-	
+
 	// data
+	//tcp数据
 	msgData := p.MakeByteSlice(int(msgLen))
 	if _, err := io.ReadFull(conn, msgData[:msgLen]); err != nil {
 		p.ReleaseByteSlice(msgData)
@@ -125,7 +128,7 @@ func (p *MsgParser) Write(conn *TCPConn, args ...[]byte) error {
 	}
 
 	//msg := make([]byte, uint32(p.lenMsgLen)+msgLen)
-	msg := p.MakeByteSlice(p.lenMsgLen+int(msgLen))
+	msg := p.MakeByteSlice(p.lenMsgLen + int(msgLen))
 	// write len
 	switch p.lenMsgLen {
 	case 1:

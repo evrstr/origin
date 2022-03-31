@@ -67,6 +67,7 @@ func (pbProcessor *PBProcessor) MsgRoute(clientId uint64, msg interface{}) error
 }
 
 // must goroutine safe
+// data 是tcp包去除头部两个字节后的数据（前两个字节代表包长度），data前两个字节代表消息类型
 func (pbProcessor *PBProcessor) Unmarshal(clientId uint64, data []byte) (interface{}, error) {
 	defer pbProcessor.ReleaseByteSlice(data)
 	var msgType uint16
