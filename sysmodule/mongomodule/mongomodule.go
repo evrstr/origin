@@ -1,181 +1,111 @@
 package mongomodule
 
 import (
-	"github.com/duanhf2012/origin/log"
-	"gopkg.in/mgo.v2"
-	"gopkg.in/mgo.v2/bson"
-	"sync"
+	"context"
 	"time"
-	"container/heap"
-	_ "gopkg.in/mgo.v2"
+
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/x/bsonx"
 )
 
-// session
-type Session struct {
-	*mgo.Session
-	ref   int
-	index int
-}
-
-type SessionHeap []*Session
-
-func (h SessionHeap) Len() int {
-	return len(h)
-}
-
-func (h SessionHeap) Less(i, j int) bool {
-	return h[i].ref < h[j].ref
-}
-
-func (h SessionHeap) Swap(i, j int) {
-	h[i], h[j] = h[j], h[i]
-	h[i].index = i
-	h[j].index = j
-}
-
-func (h *SessionHeap) Push(s interface{}) {
-	s.(*Session).index = len(*h)
-	*h = append(*h, s.(*Session))
-}
-
-func (h *SessionHeap) Pop() interface{} {
-	l := len(*h)
-	s := (*h)[l-1]
-	s.index = -1
-	*h = (*h)[:l-1]
-	return s
-}
-
-type DialContext struct {
-	sync.Mutex
-	sessions SessionHeap
-}
-
 type MongoModule struct {
-	dailContext *DialContext
+	client             *mongo.Client
+	maxOperatorTimeOut time.Duration
 }
 
-func (slf *MongoModule) Init(url string,sessionNum uint32,dialTimeout time.Duration, timeout time.Duration) error {
+type Session struct {
+	*mongo.Client
+	maxOperatorTimeOut time.Duration
+}
+
+func (mm *MongoModule) Init(uri string, maxOperatorTimeOut time.Duration) error {
 	var err error
-	slf.dailContext, err = dialWithTimeout(url, sessionNum, dialTimeout, timeout)
-
-	return err
-}
-
-func (slf *MongoModule) Ref() *Session{
-	return slf.dailContext.Ref()
-}
-
-func (slf *MongoModule) UnRef(s *Session) {
-	slf.dailContext.UnRef(s)
-}
-
-// goroutine safe
-func dialWithTimeout(url string, sessionNum uint32, dialTimeout time.Duration, timeout time.Duration) (*DialContext, error) {
-	if sessionNum <= 0 {
-		sessionNum = 100
-		log.Release("invalid sessionNum, reset to %v", sessionNum)
-	}
-
-	s, err := mgo.DialWithTimeout(url, dialTimeout)
+	mm.client, err = mongo.NewClient(options.Client().ApplyURI(uri))
 	if err != nil {
-		return nil, err
-	}
-
-	s.SetMode(mgo.Strong,true)
-	s.SetSyncTimeout(timeout)
-	s.SetSocketTimeout(timeout)
-
-	c := new(DialContext)
-
-	// sessions
-	c.sessions = make(SessionHeap, sessionNum)
-	c.sessions[0] = &Session{s, 0, 0}
-	for i := 1; i < int(sessionNum); i++ {
-		c.sessions[i] = &Session{s.New(), 0, i}
-	}
-	heap.Init(&c.sessions)
-
-	return c, nil
-}
-
-// goroutine safe
-func (c *DialContext) Close() {
-	c.Lock()
-	for _, s := range c.sessions {
-		s.Close()
-	}
-	c.Unlock()
-}
-
-// goroutine safe
-func (c *DialContext) Ref() *Session {
-	c.Lock()
-	s := c.sessions[0]
-	if s.ref == 0 {
-		s.Refresh()
-	}
-	s.ref++
-	heap.Fix(&c.sessions, 0)
-	c.Unlock()
-
-	return s
-}
-
-// goroutine safe
-func (c *DialContext) UnRef(s *Session) {
-	if s == nil {
-		return
-	}
-	c.Lock()
-	s.ref--
-	heap.Fix(&c.sessions, s.index)
-	c.Unlock()
-}
-
-
-// goroutine safe
-func (s *Session) EnsureCounter(db string, collection string, id string) error {
-	err := s.DB(db).C(collection).Insert(bson.M{
-		"_id": id,
-		"seq": 0,
-	})
-	if mgo.IsDup(err) {
-		return nil
-	} else {
 		return err
 	}
+
+	mm.maxOperatorTimeOut = maxOperatorTimeOut
+	return nil
 }
 
-// goroutine safe
-func (s *Session) NextSeq(db string, collection string, id string) (int, error) {
+func (mm *MongoModule) Start() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := mm.client.Connect(ctx); err != nil {
+		return err
+	}
+
+	ctxTimeout, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := mm.client.Ping(ctxTimeout, nil); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (mm *MongoModule) TakeSession() Session {
+	return Session{Client: mm.client, maxOperatorTimeOut: mm.maxOperatorTimeOut}
+}
+
+func (s *Session) CountDocument(db string, collection string) (int64, error) {
+	ctxTimeout, cancel := s.GetDefaultContext()
+	defer cancel()
+	return s.Database(db).Collection(collection).CountDocuments(ctxTimeout, bson.D{})
+}
+
+func (s *Session) NextSeq(db string, collection string, id interface{}) (int, error) {
 	var res struct {
 		Seq int
 	}
-	_, err := s.DB(db).C(collection).FindId(id).Apply(mgo.Change{
-		Update:    bson.M{"$inc": bson.M{"seq": 1}},
-		ReturnNew: true,
-	}, &res)
 
+	ctxTimeout, cancel := s.GetDefaultContext()
+	defer cancel()
+	err := s.Client.Database(db).Collection(collection).FindOneAndUpdate(ctxTimeout, bson.M{"_id": id}, bson.M{"$inc": bson.M{"Seq": 1}}).Decode(&res)
 	return res.Seq, err
 }
 
-// goroutine safe
-func (s *Session) EnsureIndex(db string, collection string, key []string, bBackground bool) error {
-	return s.DB(db).C(collection).EnsureIndex(mgo.Index{
-		Key:    key,
-		Unique: false,
-		Sparse: true,
-		Background: bBackground,
-	})
+//indexKeys[索引][每个索引key字段]
+func (s *Session) EnsureIndex(db string, collection string, indexKeys [][]string, bBackground bool) error {
+	return s.ensureIndex(db, collection, indexKeys, bBackground, false)
 }
 
-// goroutine safe
-func (s *Session) EnsureUniqueIndex(db string, collection string, key []string, bBackground bool) error {
-	return s.DB(db).C(collection).EnsureIndex(mgo.Index{
-		Key:    key,
-		Unique: true,
-		Sparse: true,
-		Background: bBackground,
-	})
+//indexKeys[索引][每个索引key字段]
+func (s *Session) EnsureUniqueIndex(db string, collection string, indexKeys [][]string, bBackground bool) error {
+	return s.ensureIndex(db, collection, indexKeys, bBackground, true)
+}
+
+//keys[索引][每个索引key字段]
+func (s *Session) ensureIndex(db string, collection string, indexKeys [][]string, bBackground bool, unique bool) error {
+
+	var indexes []mongo.IndexModel
+	for _, keys := range indexKeys {
+		keysDoc := bsonx.Doc{}
+		for _, key := range keys {
+			keysDoc = keysDoc.Append(key, bsonx.Int32(1))
+		}
+
+		indexes = append(indexes, mongo.IndexModel{
+			Keys:    keysDoc,
+			Options: options.Index().SetUnique(unique).SetBackground(bBackground),
+		})
+	}
+
+	ctxTimeout, cancel := context.WithTimeout(context.Background(), s.maxOperatorTimeOut)
+	defer cancel()
+	_, err := s.Database(db).Collection(collection).Indexes().CreateMany(ctxTimeout, indexes)
+	return err
+}
+
+func (s *Session) GetDefaultContext() (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.Background(), s.maxOperatorTimeOut)
+}
+
+func (s *Session) Collection(db string, collection string) *mongo.Collection {
+	return s.Database(db).Collection(collection)
 }

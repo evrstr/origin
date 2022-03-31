@@ -78,6 +78,7 @@ func (server *TCPServer) run() {
 	defer server.wgLn.Done()
 
 	var tempDelay time.Duration
+	//接受客户端连接
 	for {
 		conn, err := server.ln.Accept()
 		if err != nil {
@@ -100,6 +101,7 @@ func (server *TCPServer) run() {
 		tempDelay = 0
 
 		server.mutexConns.Lock()
+		//判断TCP连接数是否超过最大连接数，超过就不再允许新的客户端接入
 		if len(server.conns) >= server.MaxConnNum {
 			server.mutexConns.Unlock()
 			conn.Close()

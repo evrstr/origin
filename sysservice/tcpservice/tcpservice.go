@@ -24,7 +24,7 @@ type TcpService struct {
 
 	ReadDeadline  time.Duration
 	WriteDeadline time.Duration
-	Heartbeat     time.Duration //心跳间隔
+	Heartbeat     time.Duration //心跳间隔，暂时用不到，心跳一般客户端发送
 
 }
 
