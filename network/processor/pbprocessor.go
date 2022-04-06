@@ -3,6 +3,7 @@ package processor
 import (
 	"encoding/binary"
 	"fmt"
+	"hash/crc32"
 	"reflect"
 
 	"github.com/duanhf2012/origin/network"
@@ -67,23 +68,61 @@ func (pbProcessor *PBProcessor) MsgRoute(clientId uint64, msg interface{}) error
 }
 
 // must goroutine safe
-// data 是tcp包去除头部两个字节后的数据（前两个字节代表包长度），data前两个字节代表消息类型
+// data 是tcp包头+包体
+// --------------
+// Zero Tcp协议 14字节包头
+// --------------
+// | length | msg_type  | msg_id | crc_32 |  保留      |xxxx xx compression encryption | data |
+// |    2  |     2     |    4   |   4    |      1      |          xxxx   xx11         | []byte |
+//14
+// --------------
 func (pbProcessor *PBProcessor) Unmarshal(clientId uint64, data []byte) (interface{}, error) {
 	defer pbProcessor.ReleaseByteSlice(data)
+
+	// 1. 头
+	// var length uint32
 	var msgType uint16
-	if pbProcessor.LittleEndian == true {
-		msgType = binary.LittleEndian.Uint16(data[:2])
+	// var msgId uint32
+	var compression bool
+	var encryption bool
+
+	if pbProcessor.LittleEndian {
+		// length = uint32(binary.LittleEndian.Uint16(data[:2]))
+		msgType = binary.LittleEndian.Uint16(data[2:4])
+		// timestamp = binary.LittleEndian.Uint64(buffHeader[4:12])
+		// msgId = binary.LittleEndian.Uint32(data[4:8])
+		// crc_32 = binary.LittleEndian.Uint32(data[8:12])
+
 	} else {
-		msgType = binary.BigEndian.Uint16(data[:2])
+		// length = uint32(binary.BigEndian.Uint16(data[:2]))
+		msgType = binary.BigEndian.Uint16(data[2:4])
+		// timestamp = binary.BigEndian.Uint64(buffHeader[4:12])
+		// msgId = binary.BigEndian.Uint32(data[4:8])
+		// crc_32 = binary.BigEndian.Uint32(data[8:12])
 	}
 
+	compression = data[13]&0x02 != 0
+	encryption = data[13]&0x01 != 0
+
+	// 1.从注册的消息类型中查找是否有该类型
 	info, ok := pbProcessor.mapMsg[msgType]
 	if ok == false {
 		return nil, fmt.Errorf("cannot find register %d msgtype!", msgType)
 	}
+
+	// 3.解压缩和解密
+	//加密了
+	if compression {
+
+	}
+	//加密了
+	if encryption {
+
+	}
+
 	msg := reflect.New(info.msgType.Elem()).Interface()
 	protoMsg := msg.(proto.Message)
-	err := proto.Unmarshal(data[2:], protoMsg)
+	err := proto.Unmarshal(data[14:], protoMsg)
 	if err != nil {
 		return nil, err
 	}
@@ -91,7 +130,15 @@ func (pbProcessor *PBProcessor) Unmarshal(clientId uint64, data []byte) (interfa
 	return &PBPackInfo{typ: msgType, msg: protoMsg}, nil
 }
 
+// --------------
+// Zero Tcp协议 14字节包头
+// --------------
+// | length | msg_type  | msg_id | crc_32 |  保留      |xxxx xx compression encryption | data |
+// |    2  |     2     |    4   |   4    |      1      |          xxxx   xx11         | []byte |
+//14
+// --------------
 // must goroutine safe
+// 返回完整tcp包， 包头+包体
 func (pbProcessor *PBProcessor) Marshal(clientId uint64, msg interface{}) ([]byte, error) {
 	pMsg := msg.(*PBPackInfo)
 
@@ -103,15 +150,31 @@ func (pbProcessor *PBProcessor) Marshal(clientId uint64, msg interface{}) ([]byt
 		}
 	}
 
-	buff := make([]byte, 2, len(pMsg.rawMsg)+MsgTypeSize)
+	buff := make([]byte, 14+len(pMsg.rawMsg))
 	if pbProcessor.LittleEndian == true {
-		binary.LittleEndian.PutUint16(buff[:2], pMsg.typ)
-	} else {
-		binary.BigEndian.PutUint16(buff[:2], pMsg.typ)
-	}
+		binary.LittleEndian.PutUint16(buff[:2], uint16(len(pMsg.rawMsg)))
+		binary.LittleEndian.PutUint16(buff[2:4], pMsg.typ)
+		binary.LittleEndian.PutUint32(buff[8:12], crc32.ChecksumIEEE(pMsg.rawMsg))
 
-	buff = append(buff, pMsg.rawMsg...)
+	} else {
+		binary.BigEndian.PutUint16(buff[:2], uint16(len(pMsg.rawMsg)))
+		binary.BigEndian.PutUint16(buff[2:4], pMsg.typ)
+		binary.BigEndian.PutUint32(buff[8:12], crc32.ChecksumIEEE(pMsg.rawMsg))
+	}
+	buff[13] = 0xf0 //不压缩不加密
+
+	copy(buff[14:], pMsg.rawMsg)
 	return buff, nil
+	// -----
+	// buff = make([]byte, 2, len(pMsg.rawMsg)+MsgTypeSize)
+	// if pbProcessor.LittleEndian == true {
+	// 	binary.LittleEndian.PutUint16(buff[:2], pMsg.typ)
+	// } else {
+	// 	binary.BigEndian.PutUint16(buff[:2], pMsg.typ)
+	// }
+
+	// buff = append(buff, pMsg.rawMsg...)
+	// return buff, nil
 }
 
 //msgtype 相当于路由，msg相当于这个tcp包中存储的数据类型，handle是回调函数

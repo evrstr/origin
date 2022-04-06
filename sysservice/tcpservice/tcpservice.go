@@ -61,9 +61,19 @@ type TcpPack struct {
 }
 
 type Client struct {
-	id         uint64
+	// id         uint64
 	tcpConn    *network.TCPConn
 	tcpService *TcpService
+	//增加
+	Session Session
+}
+
+// 增加: Session 记录客户端的基本连接信息
+type Session struct {
+	ClientId uint64
+	UserId   uint64
+	IP       string
+	Settings map[string]string
 }
 
 //生成客户端id,理论上不会重复
@@ -186,7 +196,8 @@ func (tcpService *TcpService) NewClient(conn *network.TCPConn) network.Agent {
 			continue
 		}
 
-		pClient := &Client{tcpConn: conn, id: clientId}
+		// pClient := &Client{tcpConn: conn, id: clientId}
+		pClient := &Client{tcpConn: conn, Session: Session{ClientId: clientId, IP: conn.GetRemoteIp()}}
 		pClient.tcpService = tcpService
 		tcpService.mapClient[clientId] = pClient //添加到客户端map中
 		return pClient                           //返回新连接的客户端
@@ -196,7 +207,7 @@ func (tcpService *TcpService) NewClient(conn *network.TCPConn) network.Agent {
 
 //获取客户端id
 func (slf *Client) GetId() uint64 {
-	return slf.id
+	return slf.Session.ClientId
 }
 
 // 开始监听客户端
@@ -210,7 +221,7 @@ func (slf *Client) Run() {
 		}
 	}()
 	//发出tcp连接事件
-	slf.tcpService.NotifyEvent(&event.Event{Type: event.Sys_Event_Tcp, Data: TcpPack{ClientId: slf.id, Type: TPT_Connected}})
+	slf.tcpService.NotifyEvent(&event.Event{Type: event.Sys_Event_Tcp, Data: TcpPack{ClientId: slf.Session.ClientId, Type: TPT_Connected}})
 	for {
 		if slf.tcpConn == nil {
 			break
@@ -219,30 +230,30 @@ func (slf *Client) Run() {
 		slf.tcpConn.SetReadDeadline(slf.tcpService.ReadDeadline)
 		bytes, err := slf.tcpConn.ReadMsg()
 		if err != nil {
-			log.SDebug("read client id ", slf.id, " is error:", err.Error())
+			log.SDebug("read client id ", slf.Session.ClientId, " is error:", err.Error())
 			break
 		}
-		data, err := slf.tcpService.process.Unmarshal(slf.id, bytes)
+		data, err := slf.tcpService.process.Unmarshal(slf.Session.ClientId, bytes)
 
 		if err != nil {
 			//发出tcp接受了未注册的消息类型的事件
-			slf.tcpService.NotifyEvent(&event.Event{Type: event.Sys_Event_Tcp, Data: TcpPack{ClientId: slf.id, Type: TPT_UnknownPack, Data: bytes}})
+			slf.tcpService.NotifyEvent(&event.Event{Type: event.Sys_Event_Tcp, Data: TcpPack{ClientId: slf.Session.ClientId, Type: TPT_UnknownPack, Data: bytes}})
 			continue
 		}
 		//发出tcp接收到数据事件
-		slf.tcpService.NotifyEvent(&event.Event{Type: event.Sys_Event_Tcp, Data: TcpPack{ClientId: slf.id, Type: TPT_Pack, Data: data}})
+		slf.tcpService.NotifyEvent(&event.Event{Type: event.Sys_Event_Tcp, Data: TcpPack{ClientId: slf.Session.ClientId, Type: TPT_Pack, Data: data}})
 	}
 }
 
 //tcp关闭连接触发
 func (slf *Client) OnClose() {
-	slf.tcpService.NotifyEvent(&event.Event{Type: event.Sys_Event_Tcp, Data: TcpPack{ClientId: slf.id, Type: TPT_DisConnected}})
+	slf.tcpService.NotifyEvent(&event.Event{Type: event.Sys_Event_Tcp, Data: TcpPack{ClientId: slf.Session.ClientId, Type: TPT_DisConnected}})
 	slf.tcpService.mapClientLocker.Lock()
 	defer slf.tcpService.mapClientLocker.Unlock()
 	delete(slf.tcpService.mapClient, slf.GetId()) //从客户端map中删除
 }
 
-//发送消息给客户端
+//发送消息给客户端，需要先makMsg
 func (tcpService *TcpService) SendMsg(clientId uint64, msg interface{}) error {
 	tcpService.mapClientLocker.Lock()
 	client, ok := tcpService.mapClient[clientId]
@@ -250,7 +261,7 @@ func (tcpService *TcpService) SendMsg(clientId uint64, msg interface{}) error {
 	if ok == false {
 		return fmt.Errorf("client %d is disconnect!", clientId)
 	}
-	//用设置的tcp消息处理器序列化消息
+	//用设置的tcp消息处理器序列化消息，完整tcp包
 	bytes, err := tcpService.process.Marshal(clientId, msg)
 	if err != nil {
 		return err
@@ -333,4 +344,26 @@ func (server *TcpService) GetNetMempool() network.INetMempool {
 //释放内存
 func (server *TcpService) ReleaseNetMem(byteBuff []byte) {
 	server.tcpServer.GetNetMempool().ReleaseByteSlice(byteBuff)
+}
+
+//session
+func (tcpService *TcpService) SetSessionUserId(clientId uint64, userid uint64) {
+	tcpService.mapClientLocker.Lock()
+	tcpService.mapClient[clientId].Session.UserId = userid
+	tcpService.mapClientLocker.Unlock()
+}
+
+func (tcpService *TcpService) AddSessionSetting(clientId uint64, m map[string]string) {
+	tcpService.mapClientLocker.Lock()
+	tcpService.mapClient[clientId].Session.Settings = m
+	tcpService.mapClientLocker.Unlock()
+}
+func (tcpService *TcpService) GetSessionSetting(clientId uint64, key string) (string, error) {
+	tcpService.mapClientLocker.Lock()
+	info, ok := tcpService.mapClient[clientId].Session.Settings[key]
+	tcpService.mapClientLocker.Unlock()
+	if ok == false {
+		return "", fmt.Errorf("cannot find map key!")
+	}
+	return info, nil
 }

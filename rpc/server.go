@@ -3,12 +3,13 @@ package rpc
 import (
 	"errors"
 	"fmt"
-	"github.com/duanhf2012/origin/log"
-	"github.com/duanhf2012/origin/network"
 	"math"
 	"net"
 	"reflect"
 	"strings"
+
+	"github.com/duanhf2012/origin/log"
+	"github.com/duanhf2012/origin/network"
 )
 
 type RpcProcessorType uint8
@@ -107,7 +108,7 @@ func (agent *RpcAgent) WriteResponse(processor IRpcProcessor, serviceMethod stri
 		return
 	}
 
-	errM = agent.conn.WriteMsg([]byte{uint8(processor.GetProcessorType())}, bytes)
+	errM = agent.conn.WriteMsg(append([]byte{uint8(processor.GetProcessorType())}, bytes...))
 	if errM != nil {
 		log.SError("Rpc ", serviceMethod, " return is error:", errM.Error())
 	}

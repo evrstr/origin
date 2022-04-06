@@ -4,9 +4,6 @@ import (
 	"container/list"
 	"errors"
 	"fmt"
-	"github.com/duanhf2012/origin/log"
-	"github.com/duanhf2012/origin/network"
-	"github.com/duanhf2012/origin/util/timer"
 	"math"
 	"reflect"
 	"runtime"
@@ -14,6 +11,10 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/duanhf2012/origin/log"
+	"github.com/duanhf2012/origin/network"
+	"github.com/duanhf2012/origin/util/timer"
 )
 
 type Client struct {
@@ -205,7 +206,7 @@ func (client *Client) AsyncCall(rpcHandler IRpcHandler, serviceMethod string, ca
 	call.Seq = seq
 	client.AddPending(call)
 
-	err = client.conn.WriteMsg([]byte{uint8(processorType)}, bytes)
+	err = client.conn.WriteMsg(append([]byte{uint8(processorType)}, bytes...))
 	if err != nil {
 		client.RemovePending(call.Seq)
 		ReleaseCall(call)
@@ -240,7 +241,7 @@ func (client *Client) RawGo(processor IRpcProcessor, noReply bool, rpcMethodId u
 		client.AddPending(call)
 	}
 
-	err = client.conn.WriteMsg([]byte{uint8(processor.GetProcessorType())}, bytes)
+	err = client.conn.WriteMsg(append([]byte{uint8(processor.GetProcessorType())}, bytes...))
 	if err != nil {
 		client.RemovePending(call.Seq)
 		call.Seq = 0

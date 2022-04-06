@@ -1,10 +1,11 @@
 package network
 
 import (
-	"github.com/duanhf2012/origin/log"
 	"net"
 	"sync"
 	"time"
+
+	"github.com/duanhf2012/origin/log"
 )
 
 type TCPClient struct {
@@ -20,7 +21,7 @@ type TCPClient struct {
 	closeFlag       bool
 
 	// msg parser
-	LenMsgLen    int
+	LenMsgLen    uint16
 	MinMsgLen    uint32
 	MaxMsgLen    uint32
 	LittleEndian bool
@@ -79,7 +80,7 @@ func (client *TCPClient) dial() net.Conn {
 			return conn
 		}
 
-		log.SWarning("connect to ",client.Addr," error:", err.Error())
+		log.SWarning("connect to ", client.Addr, " error:", err.Error())
 		time.Sleep(client.ConnectInterval)
 		continue
 	}
@@ -129,8 +130,7 @@ func (client *TCPClient) Close(waitDone bool) {
 	client.cons = nil
 	client.Unlock()
 
-	if waitDone == true{
+	if waitDone == true {
 		client.wg.Wait()
 	}
 }
-

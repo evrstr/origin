@@ -111,14 +111,17 @@ func (tcpConn *TCPConn) Write(b []byte) error {
 	return tcpConn.doWrite(b)
 }
 
+// raw
 func (tcpConn *TCPConn) Read(b []byte) (int, error) {
 	return tcpConn.conn.Read(b)
 }
 
+//本地地址
 func (tcpConn *TCPConn) LocalAddr() net.Addr {
 	return tcpConn.conn.LocalAddr()
 }
 
+//对端地址
 func (tcpConn *TCPConn) RemoteAddr() net.Addr {
 	return tcpConn.conn.RemoteAddr()
 }
@@ -131,11 +134,11 @@ func (tcpConn *TCPConn) ReleaseReadMsg(byteBuff []byte) {
 	tcpConn.msgParser.ReleaseByteSlice(byteBuff)
 }
 
-func (tcpConn *TCPConn) WriteMsg(args ...[]byte) error {
+func (tcpConn *TCPConn) WriteMsg(args []byte) error {
 	if tcpConn.closeFlag == true {
 		return errors.New("conn is close")
 	}
-	return tcpConn.msgParser.Write(tcpConn, args...)
+	return tcpConn.msgParser.Write(tcpConn, args)
 }
 
 func (tcpConn *TCPConn) WriteRawMsg(args []byte) error {

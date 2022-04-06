@@ -20,7 +20,7 @@ type TCPServer struct {
 	wgConns         sync.WaitGroup
 
 	// msg parser 消息解析
-	LenMsgLen    int    //tcp包最前面表示包长度的位数，默认2
+	LenMsgLen    uint16 //tcp包最前面表示包长度的位数，默认2
 	MinMsgLen    uint32 //最大包长
 	MaxMsgLen    uint32 //最小包长
 	LittleEndian bool   //是否是小端模式
